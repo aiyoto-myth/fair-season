@@ -65,7 +65,9 @@ section{margin-bottom:26px}
 .gap em{font-style:normal;font-size:28px}
 .gap small{font:600 12px/1.2 var(--body)}
 .callbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.none{background:var(--greenbg);border:1.5px solid var(--green);border-radius:var(--r);padding:12px 14px}
+.none{background:var(--greenbg);border:1.5px solid var(--green);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
+details.more{margin-top:4px}
+details.more summary{cursor:pointer;font-weight:700;padding:8px 0;min-height:44px;display:flex;align-items:center}
 
 /* the season: ticket rows grouped by date */
 .month{font:800 15px/1 var(--body);letter-spacing:.08em;text-transform:uppercase;margin:20px 0 8px;display:flex;align-items:center;gap:10px}
@@ -140,7 +142,7 @@ dialog::backdrop{background:rgba(27,25,21,.55)}
 .f .hint{font-size:13px;margin-top:3px}
 .filled{background:var(--hi)!important;border-color:var(--ink)!important}
 .edbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;margin-top:16px;position:sticky;bottom:0;background:var(--card);padding:10px 0 2px}
-#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fffdf7;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:9;max-width:calc(100vw - 32px)}
+#toast{position:fixed;left:50%;bottom:18px;pointer-events:none;transform:translateX(-50%);background:var(--ink);color:#fffdf7;padding:10px 16px;border-radius:999px;font-weight:700;display:none;z-index:9;max-width:calc(100vw - 32px)}
 .hide{display:none!important}
 
 @media (max-width:900px){
@@ -239,7 +241,11 @@ dialog::backdrop{background:rgba(27,25,21,.55)}
 <dialog id="ed" aria-labelledby="edTitle">
 <form class="ed" id="edForm" method="dialog" novalidate>
   <h2 id="edTitle">Add a show</h2>
-  <div class="paste">
+  <div class="f" id="edQuick" style="margin:10px 0 14px">
+    <div><label for="fStatus">Where it stands</label><select id="fStatus"></select></div>
+    <div><label for="fPay">Commit by</label><input type="date" id="fPay"><div class="hint">First day you must accept, sign or pay (a deposit counts)</div></div>
+  </div>
+  <div class="paste" id="edPaste">
     <label for="pasteIn">Fastest: copy the show's page and paste it here</label>
     <p style="margin:2px 0 8px;font-size:14px">On ZAPP, select the "Dates &amp; Deadlines" box (or the whole page) and copy. Works with most show sites too.</p>
     <textarea id="pasteIn" placeholder="Paste the show's dates and fees here"></textarea>
@@ -252,15 +258,15 @@ dialog::backdrop{background:rgba(27,25,21,.55)}
     <div><label for="fEnd">Last show day</label><input type="date" id="fEnd"></div>
     <div><label for="fSetup">Set-up / arrival day</label><input type="date" id="fSetup"><div class="hint">Only if it's before the first show day</div></div>
     <div></div>
-    <div><label for="fStatus">Where it stands</label><select id="fStatus"></select></div>
     <div><label for="fRank">How much you want it</label><select id="fRank"><option value="1">First choice</option><option value="2">Normal</option><option value="3">Backup</option></select></div>
     <div><label for="fApply">Apply by</label><input type="date" id="fApply"></div>
     <div><label for="fNotify">They notify by</label><input type="date" id="fNotify"><div class="hint">Notification date</div></div>
-    <div><label for="fPay">Commit by</label><input type="date" id="fPay"><div class="hint">First day you must accept, sign or pay (a deposit counts)</div></div>
     <div><label for="fRefund">Last day to cancel with a refund</label><input type="date" id="fRefund"><div class="hint">Leave empty if they don't refund</div></div>
     <div><label for="fKeep">They keep if you cancel by then ($)</label><input type="number" id="fKeep" min="0" step="0.01" inputmode="decimal"><div class="hint">Cancellation fee; empty = full refund</div></div>
     <div><label for="fJury">Jury fee ($)</label><input type="number" id="fJury" min="0" step="0.01" inputmode="decimal"></div>
     <div><label for="fBooth">Booth fee ($)</label><input type="number" id="fBooth" min="0" step="0.01" inputmode="decimal"></div>
+    <div><label for="fDeposit">Deposit ($)</label><input type="number" id="fDeposit" min="0" step="0.01" inputmode="decimal"><div class="hint">Only if they take a deposit first</div></div>
+    <div><label for="fBalance">Balance due by</label><input type="date" id="fBalance"></div>
     <div class="full"><label for="fNotes">Notes</label><input type="text" id="fNotes" maxlength="200" autocomplete="off"></div>
   </div>
   <p id="edErr" class="err" style="margin:10px 0 0"></p>
@@ -297,6 +303,9 @@ function diff(a, b){ return Math.round((ms(b) - ms(a)) / DAY); }          // b -
 function dow(s){ return new Date(ms(s)).getUTCDay(); }                      // 0 = Sunday
 function endOf(s){ return valid(s.end) && s.end >= s.start ? s.end : s.start; }
 function active(s){ return !!ACTIVE[s.status]; }
+/* an idea whose apply-by passed more than a week ago: you didn't apply (or forgot to say so); it drops out of calls, calendar and the free count */
+function stale(s, today){ return s.status === 'idea' && !!today && valid(s.applyBy) && diff(s.applyBy, today) > 7; }
+function live(s, today){ return active(s) && !stale(s, today); }
 function num(x){ x = +x; return isFinite(x) && x > 0 ? Math.round(x * 100) / 100 : 0; }
 function rankOf(s){ return s.rank === 1 || s.rank === 3 ? s.rank : 2; }   // 1 = first choice, 3 = backup
 
@@ -311,9 +320,13 @@ function gapDays(a, b){
 /* what dropping a show costs on a given day: unpaid = nothing more; paid = the booth fee, or only the cancellation fee while the refund window is open */
 function dropCost(s, day){
   if(s.status !== 'booked') return 0;
-  if(valid(s.refundBy) && day && day <= s.refundBy) return Math.min(num(s.keep), num(s.booth));
-  return num(s.booth);
+  var paid = paidSoFar(s, day);
+  if(valid(s.refundBy) && day && day <= s.refundBy) return Math.min(num(s.keep), paid);
+  return paid;
 }
+/* booked with a deposit: until the balance date only the deposit is paid */
+function hasBalance(s){ return s.status === 'booked' && num(s.deposit) > 0 && num(s.deposit) < num(s.booth) && valid(s.balanceBy); }
+function paidSoFar(s, day){ return hasBalance(s) && day && day < s.balanceBy ? num(s.deposit) : num(s.booth); }
 
 /* groups of shows whose dates overlap (chained), for the season list; only shows with a valid start */
 function clusters(shows){
@@ -335,25 +348,28 @@ function clusters(shows){
    waitlist Y is waitlisted: it can call any day until the show; what switching from X costs
    unknown  Y has no answer date and X wants money or is paid
    same     nothing more specific: you can only work one of these
-   Non-overlapping active shows closer than minGap free days -> close. */
+   Non-overlapping active shows closer than minGap free days -> close (firm when both are in or booked).
+   Ideas whose apply-by passed over a week ago are left out. hard = money on the line and you prefer the other one, or you
+   haven't said which you prefer (tie: the card asks). */
 var ORDER = {double:0, pick:1, decide:2, late:3, risk:4, waitlist:5, unknown:6, close:7, same:8};
 function issues(shows, opt){
   opt = opt || {};
   var minGap = Math.max(0, Math.floor(+opt.minGap || 0)), today = valid(opt.today) ? opt.today : '';
-  var act = shows.filter(function(s){ return active(s) && valid(s.start) && (!today || endOf(s) >= today); });
+  var act = shows.filter(function(s){ return live(s, today) && valid(s.start) && (!today || endOf(s) >= today); });
   act.sort(function(a, b){ return onsite(a) < onsite(b) ? -1 : onsite(a) > onsite(b) ? 1 : String(a.id) < String(b.id) ? -1 : 1; });
   var out = [];
   for(var i = 0; i < act.length; i++) for(var j = i + 1; j < act.length; j++){
     var a = act[i], b = act[j];
     if(overlap(a, b)) out.push(pairCall(a, b, today));
-    else if(minGap > 0 && !act.some(function(c){ return c !== a && c !== b && onsite(c) > endOf(a) && endOf(c) < onsite(b); })){   // neighbours only
+    else if(minGap > 0 && !act.some(function(c){ return c !== a && c !== b && onsite(c) < onsite(b) && endOf(c) > endOf(a); })){   // neighbours only: no other show touches the gap
       var g = gapDays(a, b);
-      if(g < minGap) out.push({type:'close', a:a, b:b, gap:g, need:minGap, date:onsite(b), hard:false});
+      if(g < minGap) out.push({type:'close', a:a, b:b, gap:g, need:minGap, date:onsite(b), hard:false, firm: !!(GOTIN[a.status] && GOTIN[b.status])});
     }
   }
   out.sort(function(x, y){ return (x.hard === y.hard ? 0 : x.hard ? -1 : 1) || (ORDER[x.type] - ORDER[y.type]) || (x.date < y.date ? -1 : x.date > y.date ? 1 : 0); });
   return out;
 }
+function worse(x, y){ if(x.hard !== y.hard) return x.hard ? x : y; if(ORDER[x.type] !== ORDER[y.type]) return ORDER[x.type] < ORDER[y.type] ? x : y; return (x.money || 0) >= (y.money || 0) ? x : y; }
 function first(a, b){ return a.start <= b.start ? a : b; }
 function pairCall(a, b, today){
   var d0 = first(a, b).start;
@@ -363,43 +379,45 @@ function pairCall(a, b, today){
     unpaid.forEach(function(s){ if(valid(s.payBy) && (!by || s.payBy < by)) by = s.payBy; });
     return {type:'pick', a:a, b:b, by:by, date: by || d0, hard:true};
   }
-  var c = dir(a, b, today) || dir(b, a, today);
+  var c1 = dir(a, b, today), c2 = dir(b, a, today), c = c1 && c2 ? worse(c1, c2) : (c1 || c2);   // both directions, keep the more serious
   if(c) return c;
   return {type:'same', a:a, b:b, date:d0, hard:false};
 }
-/* x = the show that wants money (or already has it), y = the one that hasn't answered */
+/* x = the show that wants money (or already has it), y = the one that hasn't answered (or hasn't been applied to yet) */
 function dir(x, y, today){
-  var prefY = rankOf(y) < rankOf(x);
+  var tie = rankOf(y) === rankOf(x), prefY = rankOf(y) < rankOf(x), hard = prefY || tie;
   if(y.status === 'waitlist' && GOTIN[x.status]){
-    return {type:'waitlist', a:x, b:y, now: dropCost(x, today), later: num(x.booth), refund: valid(x.refundBy) ? x.refundBy : '', hard:prefY, date: valid(x.payBy) && x.status === 'in' ? x.payBy : onsite(y)};
+    return {type:'waitlist', a:x, b:y, now: dropCost(x, today), later: dropCost(x, '9999-12-31'), refund: valid(x.refundBy) ? x.refundBy : '', hard:prefY, tie:tie, date: valid(x.payBy) && x.status === 'in' ? x.payBy : onsite(y)};
   }
-  var waiting = PENDING[y.status] || (y.status === 'idea' && x.status === 'idea');
+  /* y still to answer: applied; or not applied yet (idea) while x is an idea, applied or in = the application-time forecast */
+  var waiting = PENDING[y.status] || (y.status === 'idea' && (x.status === 'idea' || PENDING[x.status] || GOTIN[x.status]));
   if(!waiting) return null;
-  var yN = valid(y.notify) ? y.notify : '';
+  var yN = valid(y.notify) ? y.notify : '', yIdea = y.status === 'idea';
   if(x.status === 'booked'){
-    if(!yN) return {type:'unknown', a:x, b:y, why:'booked', money:num(x.booth), date:onsite(x), hard:prefY};
-    if(today && yN < today) return {type:'late', a:x, b:y, why:'booked', money:dropCost(x, today), date:today, hard:prefY};
+    if(!yN) return yIdea ? null : {type:'unknown', a:x, b:y, why:'booked', money:dropCost(x, today), date:onsite(x), hard:hard, tie:tie};
+    if(today && yN < today) return yIdea ? null : {type:'late', a:x, b:y, why:'booked', money:dropCost(x, today), date:today, hard:hard, tie:tie};
     var cost = dropCost(x, yN);
     if(!cost) return null;                                   // refund window still open when y answers: nothing at stake
-    return {type:'risk', a:x, b:y, money:cost, refund: valid(x.refundBy) ? x.refundBy : '', hard:prefY, date:yN};
+    return {type:'risk', a:x, b:y, money:cost, refund: valid(x.refundBy) ? x.refundBy : '', hard:hard, tie:tie, yIdea:yIdea, date:yN};
   }
   var xPay = valid(x.payBy) ? x.payBy : '';
-  if(!xPay) return x.status === 'in' && PENDING[y.status] ? {type:'unknown', a:x, b:y, why:'nopay', money:num(x.booth), date:onsite(x), hard:prefY} : null;
+  if(!xPay) return x.status === 'in' && PENDING[y.status] ? {type:'unknown', a:x, b:y, why:'nopay', money:num(x.booth), date:onsite(x), hard:hard, tie:tie} : null;
   if(!(x.status === 'in' || PENDING[x.status] || x.status === 'idea')) return null;
-  if(today && yN && yN < today && PENDING[y.status]) return {type:'late', a:x, b:y, why:'pay', pay:xPay, money:num(x.booth), date:xPay, hard:prefY};
-  if(!yN) return x.status === 'in' ? {type:'unknown', a:x, b:y, why:'pay', money:num(x.booth), date:xPay, hard:prefY} : null;
-  if(xPay >= yN) return null;                                // y answers first: no blind decision
+  if(today && yN && yN < today && PENDING[y.status]) return x.status === 'in' ? {type:'late', a:x, b:y, why:'pay', pay:xPay, money:num(x.booth), date:xPay, hard:hard, tie:tie} : null;
+  if(!yN) return x.status === 'in' ? {type:'unknown', a:x, b:y, why:'pay', money:num(x.booth), date:xPay, hard:hard, tie:tie} : null;
+  if(xPay > yN) return null;                                 // y answers first (same day counts as blind: the email may come that evening)
   return {type:'decide', a:x, b:y, pay:xPay, notify:yN, blind: diff(xPay, yN), money:num(x.booth),
-          refund: valid(x.refundBy) ? x.refundBy : '', hard:prefY, forecast: x.status !== 'in', date:xPay};
+          refund: valid(x.refundBy) ? x.refundBy : '', hard:hard, tie:tie, forecast: x.status !== 'in', yIdea:yIdea, date:xPay};
 }
 
-function money(shows){
+function money(shows, todayM){
+  todayM = valid(todayM) ? todayM : '0000-00-00';
   var m = {jury:0, wasted:0, paid:0, due:0, lost:0, accepted:0, decided:0, pending:0, applied:0};
   shows.forEach(function(s){
     var st = s.status;
     if(st !== 'idea'){ m.jury += num(s.jury); m.applied++; }
     if(st === 'passed' || st === 'no' || st === 'withdrew') m.wasted += num(s.jury);
-    if(st === 'booked') m.paid += num(s.booth);
+    if(st === 'booked'){ var pd = paidSoFar(s, todayM); m.paid += pd; m.due += num(s.booth) - pd; }
     if(st === 'in') m.due += num(s.booth);
     if(st === 'withdrew') m.lost += dropCost({status:'booked', booth:s.booth, keep:s.keep, refundBy:s.refundBy}, valid(s.left) ? s.left : '9999-12-31');
     if(GOTIN[st] || st === 'passed' || st === 'withdrew') { m.accepted++; m.decided++; }
@@ -421,11 +439,13 @@ function todo(shows, today, horizon){
     if(date > until) return;
     if(late && !(kind === 'apply' || kind === 'pay' || kind === 'answer')) return;
     if(late && valid(s.start) && endOf(s) < today) return;                // the show is over: nothing left to do
+    if(late && !valid(s.start) && diff(date, today) > 60) return;          // no show dates and long past: stale
     if(late && kind === 'apply' && diff(date, today) > 7) return;          // a missed deadline can't be acted on for long
     out.push({date:date, kind:kind, show:s, label:label, late:late, days:diff(today, date)});
   }
   shows.forEach(function(s){
     if(s.status === 'idea') add(s.applyBy, 'apply', s, 'Apply');
+    if(hasBalance(s) && s.balanceBy >= today) add(s.balanceBy, 'pay', s, 'Pay balance');
     if(PENDING[s.status]) add(s.notify, 'answer', s, 'They notify');
     if(s.status === 'in') add(s.payBy, 'pay', s, 'Commit / pay');
     if(s.status === 'booked' && valid(s.refundBy) && s.refundBy >= today) add(s.refundBy, 'refund', s, 'Last day to cancel with a refund');
@@ -461,12 +481,14 @@ function ics(shows, stamp){
     if(opt.alarm) L.push('BEGIN:VALARM', 'ACTION:DISPLAY', fold('DESCRIPTION:' + icsEsc(title)), 'TRIGGER:-P' + opt.alarm + 'D', 'END:VALARM');
     L.push('END:VEVENT');
   }
+  var today = fromMs(Date.now());
   shows.forEach(function(s){
-    if(!active(s)) return;
+    if(!live(s, today)) return;
     var n = String(s.name || '').trim() || 'Untitled show', id = String(s.id).replace(/[^A-Za-z0-9]/g, '');
     if(s.status === 'idea') ev(id + '-apply', s.applyBy, '', 'Apply: ' + n, num(s.jury) ? 'Jury fee $' + num(s.jury) : '', {alarm:3});
     if(PENDING[s.status] || s.status === 'idea') ev(id + '-notify', s.notify, '', 'They notify: ' + n, '');
-    if(s.status !== 'booked') ev(id + '-pay', s.payBy, '', 'Commit / pay: ' + n, num(s.booth) ? 'Booth fee $' + num(s.booth) : '', {alarm:3});
+    if(s.status === 'in' || s.status === 'applied') ev(id + '-pay', s.payBy, '', 'Commit / pay: ' + n, num(s.booth) ? 'Booth fee $' + num(s.booth) : '', {alarm:3});
+    if(hasBalance(s)) ev(id + '-balance', s.balanceBy, '', 'Pay balance: ' + n, 'Balance $' + (num(s.booth) - num(s.deposit)), {alarm:3});
     if(s.status === 'booked') ev(id + '-refund', s.refundBy, '', 'Last day to cancel with refund: ' + n, '', {alarm:3});
     var booked = s.status === 'booked';
     ev(id + '-show', onsite(s), endOf(s), (booked ? '' : 'Maybe: ') + n + (s.place ? ' (' + s.place + ')' : ''), booked ? 'Booked' : 'Not booked yet', {busy:booked});
@@ -476,7 +498,7 @@ function ics(shows, stamp){
 }
 
 /* ---------- spreadsheet (CSV) ---------- */
-var CSV_COLS = ['name','place','setup','start','end','status','rank','applyBy','notify','payBy','refundBy','keep','jury','booth','notes'];
+var CSV_COLS = ['name','place','setup','start','end','status','rank','applyBy','notify','payBy','refundBy','keep','jury','booth','deposit','balanceBy','notes'];
 function csvCell(v){ v = v == null ? '' : String(v); if(/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function csv(shows){
   return [CSV_COLS.join(',')].concat(shows.map(function(s){ return CSV_COLS.map(function(k){ return csvCell(s[k]); }).join(','); })).join('\r\n') + '\r\n';
@@ -486,13 +508,15 @@ function csv(shows){
    ZAPP shows "March 2, 2026" on one line and "Notification Date" under it (date first); most show sites write
    "Application deadline: March 2, 2026" (label first). We decide which by whichever comes first in the text. */
 var FIELDS = [
-  ['ignore', /early[ \t-]*bird(([ \t]+[a-z]+){0,2}[ \t]+deadline)?|late[ \t-]*fee(([ \t]+[a-z]+){0,2}[ \t]+deadline)?|open[ \t]+date|applications?[ \t]+open|jury[ \t]+(start|end|dates?|days?|period)|jurying([ \t]+(begins|ends|dates?|period))?/ig],
+  ['ignore', /jury[ \t]*:|early[ \t-]*bird(([ \t]+[a-z]+){0,2}[ \t]+deadline)?|late[ \t-]*fee(([ \t]+[a-z]+){0,2}[ \t]+deadline)?|open[ \t]+date|applications?[ \t]+open|jury[ \t]+(start|end|dates?|days?|period)|jurying([ \t]+(begins|ends|dates?|period))?/ig],
   ['notify', /notification([ \t]+date)?s?|notify[ \t]+date|artists?[ \t]+(will[ \t]+be[ \t]+)?notified|jury[ \t]+results|acceptance[ \t]+(letters?|notices?|emails?)[ \t]*(sent|go[ \t]+out|mailed)?|results[ \t]+(sent|announced|emailed|released)/ig],
-  ['payBy', /(booth[ \t]+)?(fee[ \t]+)?payment[ \t]+deadline|balance[ \t]+deadline|deposit[ \t]+(is[ \t]+)?due|purchase[ \t]+deadline|booth[ \t]+(fees?|payment)[ \t]+(is[ \t]+|are[ \t]+)?due|payment[ \t]+(is[ \t]+)?due|balance[ \t]+(is[ \t]+)?due|pay(ment)?[ \t]+by|accept(ance)?[ \t]+(your[ \t]+)?(invitation|spot)[ \t]+by|confirm(ation)?[ \t]+(deadline|by)|commit(ment)?[ \t]+deadline/ig],
+  ['balanceBy', /balance([ \t]+payment)?[ \t]+(is[ \t]+)?(due|deadline)|final[ \t]+payment([ \t]+(is[ \t]+)?due)?|remaining[ \t]+balance([ \t]+(is[ \t]+)?due)?/ig],
+  ['setup', /move[ \t-]*in|load[ \t-]*in|set[ \t-]*up[ \t]+(day|date|begins|starts)|artist[ \t]+check[ \t-]*in|arrival/ig],
+  ['payBy', /(acceptance|deposit|contract|confirmation|commitment)[ \t]+deadline|accept[ \t]+by|confirm\b[^.\n]{0,40}?\bby|pay\b[^.\n]{0,40}?\bby|(booth[ \t]+)?(fee[ \t]+)?payment[ \t]+deadline|deposit[ \t]+(is[ \t]+)?due|purchase[ \t]+deadline|booth[ \t]+(fees?|payment)[ \t]+(is[ \t]+|are[ \t]+)?due|payment[ \t]+(is[ \t]+)?due|pay(ment)?[ \t]+by|accept(ance)?[ \t]+(your[ \t]+)?(invitation|spot)[ \t]+by|confirm(ation)?[ \t]+(deadline|by)|commit(ment)?[ \t]+deadline/ig],
   ['refundBy', /cancel(lation)?s?[ \t]+(received|made|submitted)[ \t]+(before|by|prior[ \t]+to|on[ \t]+or[ \t]+before)|refund(s|ed)?[^.\n]{0,50}?(before|until|through|prior[ \t]+to)|refund[ \t]+(deadline|date|by)|cancel(lation)?s?[ \t]+(deadline|by|before)|last[ \t]+day[ \t]+to[ \t]+cancel|refunds?[ \t]+(will[ \t]+be[ \t]+)?(given|issued|available)[ \t]+(until|through|before)/ig],
   ['applyBy', /application[ \t]+deadline|applications?[ \t]+(are[ \t]+)?due|deadline[ \t]+to[ \t]+apply|apply[ \t]+by|entry[ \t]+deadline|submission[ \t]+deadline|entries[ \t]+due|deadline(?!s)/ig],
   ['end', /event[ \t]+end|show[ \t]+end|end[ \t]+date/ig],
-  ['start', /event[ \t]+start|show[ \t]+dates?|event[ \t]+dates?|festival[ \t]+dates?|fair[ \t]+dates?|show[ \t]+start|start[ \t]+date|when[ \t]*:/ig]
+  ['start', /event[ \t]*:|dates[ \t]*:|event[ \t]+start|show[ \t]+dates?|event[ \t]+dates?|festival[ \t]+dates?|fair[ \t]+dates?|show[ \t]+start|start[ \t]+date|when[ \t]*:/ig]
 ];
 var MONTHS_RE = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?';
 var DATE_RES = [
@@ -500,13 +524,14 @@ var DATE_RES = [
   {re: new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?[ \\t]+' + MONTHS_RE + ',?[ \\t]+(\\d{4})', 'ig'),
    get: function(m){ return {mo: MON[m[2].toLowerCase().replace('.', '').slice(0, 3)], d:+m[1], y:+m[3], d2:0}; }},
   // June 6-7, 2026 / June 6 – 7 / June 30 - July 1, 2026 / June 6th  (a day is 1-2 digits not followed by another digit: "June 2027" is no date)
-  {re: new RegExp('\\b' + MONTHS_RE + '[ \\t]+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:[ \\t]*(?:-|–|—|to|through|thru|&|and)[ \\t]*(?:' + MONTHS_RE + '[ \\t]+)?(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?)?(?:,?[ \\t]+(\\d{4}))?', 'ig'),
+  {re: new RegExp('\\b' + MONTHS_RE + '[ \\t]+(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?:(?:[ \\t]*,[ \\t]*\\d{1,2}(?!\\d)(?:st|nd|rd|th)?)*[ \\t]*(?:-|–|—|to|through|thru|&|and|,)[ \\t]*(?:' + MONTHS_RE + '[ \\t]+)?(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?(?![ \\t]*:))?(?:,?[ \\t]+(\\d{4}))?', 'ig'),
    get: function(m){ var mo = MON[m[1].toLowerCase().replace('.', '').slice(0, 3)]; var mo2 = m[3] ? MON[m[3].toLowerCase().replace('.', '').slice(0, 3)] : mo; return {mo:mo, d:+m[2], mo2:mo2, d2: m[4] ? +m[4] : 0, y: m[5] ? +m[5] : 0}; }},
   // 2026-06-06
   {re: /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g, get: function(m){ return {mo:+m[2] - 1, d:+m[3], y:+m[1], d2:0}; }},
   // 6/6/2026 or 6/6/26 (US order)
   {re: /\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b(?:[ \t]*(?:-|–|—|to|through)[ \t]*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b)?/g,
-   get: function(m){ var y = +m[3]; if(y < 100) y += 2000; var y2 = m[6] ? +m[6] : 0; if(y2 && y2 < 100) y2 += 2000; return {mo:+m[1] - 1, d:+m[2], y:y, mo2: m[4] ? +m[4] - 1 : null, d2: m[5] ? +m[5] : 0, y2:y2}; }}
+   get: function(m, dm){ var y = +m[3]; if(y < 100) y += 2000; var y2 = m[6] ? +m[6] : 0; if(y2 && y2 < 100) y2 += 2000;
+     return dm ? {mo:+m[2] - 1, d:+m[1], y:y, mo2: m[5] ? +m[5] - 1 : null, d2: m[4] ? +m[4] : 0, y2:y2} : {mo:+m[1] - 1, d:+m[2], y:y, mo2: m[4] ? +m[4] - 1 : null, d2: m[5] ? +m[5] : 0, y2:y2}; }}
 ];
 function mkDate(y, mo, d){ if(!(mo >= 0 && mo <= 11 && d >= 1 && d <= 31)) return ''; var s = iso(y, mo, d); return valid(s) ? s : ''; }
 /* a date written without a year: the next time that day comes round, counting from 30 days ago (deadlines just past still read right);
@@ -518,12 +543,14 @@ function guessYear(mo, d, today){
 }
 function findDates(text, today){
   var out = [], taken = [];
+  /* any slash date with a first number over 12 (13/06/2027) means this text writes day/month: read them all that way */
+  var dm = /\b(1[3-9]|2\d|3[01])\/(0?[1-9]|1[0-2])\/\d{2,4}\b/.test(text);
   DATE_RES.forEach(function(D){
     D.re.lastIndex = 0; var m;
     while((m = D.re.exec(text))){
       var a = m.index, b = a + m[0].length;
       if(taken.some(function(t){ return a < t[1] && b > t[0]; })) continue;
-      var p = D.get(m); if(p.mo == null || isNaN(p.mo)) continue;
+      var p = D.get(m, dm); if(p.mo == null || isNaN(p.mo)) continue;
       var guessed = !p.y, start = p.y ? mkDate(p.y, p.mo, p.d) : guessYear(p.mo, p.d, today);
       if(!start) continue;
       var end = '';
@@ -533,6 +560,13 @@ function findDates(text, today){
     }
   });
   out.sort(function(x, y){ return x.pos - y.pos; });
+  /* "June 5, 2027 - June 6, 2027" / "Dec 31, 2026 - Jan 2, 2027": two dates joined by a dash are one range */
+  for(var i = out.length - 2; i >= 0; i--){
+    var x = out[i], y = out[i + 1];
+    if(!x.to && /^[ \t]*(-|–|—|to|through|thru)[ \t]*$/i.test(text.slice(x.end, y.pos)) && diff(x.date, y.date) >= 0 && diff(x.date, y.date) <= 14){
+      x.to = y.to || y.date; x.end = y.end; x.guessed = x.guessed && y.guessed; out.splice(i + 1, 1);
+    }
+  }
   return out;
 }
 function findLabels(text){
@@ -562,52 +596,63 @@ function readPaste(text, today){
   today = valid(today) ? today : fromMs(Date.now());
   text = String(text || '').slice(0, 60000)
     .replace(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)\.?,?[ \t]+(?=(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))/ig, '');   // "Friday, January 15" -> "January 15"
-  var res = {fields:{}, guessed:{}, warn:[], found:0}, startYearless = false, usedAll = {};
+  var res = {fields:{}, guessed:{}, warn:[], found:0}, startYearless = false;
   var dates = findDates(text, today), labels = findLabels(text);
-  if(dates.length && labels.length){
-    /* vote per label: a date later on the label's own line = "label: date"; a line holding only a date just above = ZAPP layout */
-    var vLabel = 0, vDate = 0;
-    labels.forEach(function(L){
-      var eol = text.indexOf('\n', L.end); if(eol < 0) eol = text.length;
-      if(dates.some(function(d){ return d.pos >= L.end && d.pos < eol; })){ vLabel++; return; }
-      var bol = text.lastIndexOf('\n', L.pos - 1), before = text.slice(0, bol < 0 ? 0 : bol).replace(/\s+$/, '');
-      var prevStart = before.lastIndexOf('\n') + 1, prev = before.slice(prevStart);
-      if(prev && dates.some(function(d){ return d.pos >= prevStart && d.end <= prevStart + prev.length && prev.replace(text.slice(d.pos, d.end), '').replace(/[\s,.\-–:]/g, '').length < 4; })) vDate++;
-    });
-    /* no "label: date" lines at all: the block's first item decides (ZAPP opens with a date line, stacked lists open with a label) */
-    var dateFirst = vLabel === 0 ? dates[0].pos < labels[0].pos : vDate > vLabel;
-    var used = usedAll;
-    labels.forEach(function(L){
-      var pick = null, k;
-      if(dateFirst){
-        for(k = dates.length - 1; k >= 0; k--) if(dates[k].end <= L.pos){ pick = dates[k]; break; }
-        if(pick && labels.some(function(o){ return o !== L && o.pos >= pick.end && o.pos < L.pos; })) pick = null;
-        if(pick && L.pos - pick.end > 60) pick = null;
-      } else {
-        for(k = 0; k < dates.length; k++) if(dates[k].pos >= L.end){ pick = dates[k]; break; }
-        if(pick && labels.some(function(o){ return o !== L && o.pos > L.pos && o.pos < pick.pos; })) pick = null;
-        if(pick && pick.pos - L.end > 80) pick = null;
+  /* per label, by lines: (1) a date later on the label's own line wins ("Label: date"); (2) other words after the label
+     ("TBA", "rolling") = no date; (3) a label alone on its line takes the date-only line below or above it. When both exist
+     (ZAPP puts the date above, stacked lists put it below) the run of date-only / label-only lines it sits in decides by its first line. */
+  var lines = [], off = 0;
+  text.split('\n').forEach(function(t){ lines.push({a:off, b:off + t.length, t:t}); off += t.length + 1; });
+  function lineOf(pos){ for(var i = 0; i < lines.length; i++) if(pos <= lines[i].b) return i; return lines.length - 1; }
+  function datesIn(i){ return dates.filter(function(d){ return d.pos >= lines[i].a && d.end <= lines[i].b; }); }
+  function labelsIn(i){ return labels.filter(function(L){ return L.pos >= lines[i].a && L.end <= lines[i].b; }); }
+  function rest(i, spans){ var t = lines[i].t, cut = ''; var k = 0; spans.slice().sort(function(x, y){ return x.pos - y.pos; }).forEach(function(sp){ cut += t.slice(k, sp.pos - lines[i].a); k = sp.end - lines[i].a; }); cut += t.slice(k); return cut.replace(/[\s,.\-–—:;()&|]/g, ''); }
+  function dateLine(i){ return i >= 0 && i < lines.length && datesIn(i).length === 1 && !labelsIn(i).length && rest(i, datesIn(i)).length < 4; }
+  function labelLine(i){ return i >= 0 && i < lines.length && labelsIn(i).length === 1 && !datesIn(i).length && rest(i, labelsIn(i)).length < 3; }
+  function nonEmpty(i, step){ i += step; while(i >= 0 && i < lines.length && !lines[i].t.trim()) i += step; return i; }
+  var usedAll = {};
+  labels.forEach(function(L){
+    var li = lineOf(L.pos), pick = null;
+    var after = datesIn(li).filter(function(d){ return d.pos >= L.end && !usedAll[d.pos]; });
+    var nextLabel = labelsIn(li).filter(function(o){ return o.pos > L.pos; })[0];
+    if(after.length && (!nextLabel || after[0].pos < nextLabel.pos)) pick = after[0];
+    else if(labelLine(li)){
+      var up = nonEmpty(li, -1), dn = nonEmpty(li, 1), hasUp = dateLine(up) && !usedAll[datesIn(up)[0].pos], hasDn = dateLine(dn) && !usedAll[datesIn(dn)[0].pos];
+      var dateFirst = hasUp && !hasDn;
+      if(hasUp && hasDn){
+        var k = li, top = li;
+        while(true){ var pk = nonEmpty(k, -1); if(pk >= 0 && (dateLine(pk) || labelLine(pk))){ top = pk; k = pk; } else break; }
+        dateFirst = dateLine(top);
       }
-      if(!pick || used[pick.pos] || L.field === 'ignore'){ if(pick) used[pick.pos] = 1; return; }
-      used[pick.pos] = 1;
-      if(L.field === 'payBy' && res.fields.payBy){ if(pick.date < res.fields.payBy){ res.fields.payBy = pick.date; if(pick.guessed) res.guessed.payBy = 1; else delete res.guessed.payBy; } return; }   // deposit before balance: the first money date commits you
-      if(res.fields[L.field]) return;                                     // first one wins
-      if(L.field === 'start'){ res.fields.start = pick.date; if(pick.to) res.fields.end = pick.to; startYearless = pick.guessed; }
-      else res.fields[L.field] = pick.date;
-      if(pick.guessed) res.guessed[L.field] = 1;
-    });
-  }
+      if(hasUp && dateFirst) pick = datesIn(up)[0]; else if(hasDn) pick = datesIn(dn)[0];
+    }
+    if(!pick) return;
+    if(L.field !== 'start' && L.field !== 'ignore' && pick.to && !res.fields.start){ return; }   // a range under a deadline label is more likely the show
+    usedAll[pick.pos] = 1;
+    if(L.field === 'ignore') return;
+    if(L.field === 'payBy' && res.fields.payBy){ if(pick.date < res.fields.payBy){ res.fields.payBy = pick.date; if(pick.guessed) res.guessed.payBy = 1; else delete res.guessed.payBy; } return; }   // deposit before balance: the first money date commits you
+    if(res.fields[L.field]) return;                                     // first one wins
+    if(L.field === 'start'){ res.fields.start = pick.date; if(pick.to) res.fields.end = pick.to; startYearless = pick.guessed; }
+    else res.fields[L.field] = pick.date;
+    if(pick.guessed) res.guessed[L.field] = 1;
+  });
   if(!res.fields.start){   // no "show dates" label: the first date range in the text is very likely the show itself
-    var r = dates.filter(function(d){ return d.to && !usedAll[d.pos]; })[0];
+    var r = dates.filter(function(d){ return d.to && !usedAll[d.pos]; }).sort(function(x, y){ return x.date < y.date ? 1 : -1; })[0];   // show dates come after jury dates
     if(r){ res.fields.start = r.date; res.fields.end = r.to; res.guessed.start = 1; startYearless = r.guessed; }
   }
   if(res.fields.end && res.fields.start && (res.fields.end < res.fields.start || diff(res.fields.start, res.fields.end) > 14)) delete res.fields.end;
-  /* a show date with no year that lands before its own deadlines belongs to next year */
-  var F0 = res.fields, latest = [F0.applyBy, F0.notify, F0.payBy].filter(valid).sort().pop();
-  if(F0.start && latest && F0.start < latest && startYearless){
-    var up = function(d){ return mkDate(+d.slice(0, 4) + 1, +d.slice(5, 7) - 1, +d.slice(8, 10)) || d; };
-    F0.start = up(F0.start); if(F0.end) F0.end = up(F0.end); res.guessed.start = 1;
+  /* years: a year-less show date was guessed as the next time it comes round. It moves a year on only if a deadline that
+     has its year written is later than it. Year-less deadlines are then put in the latest year that keeps them on or before the show. */
+  var F0 = res.fields, DL = ['applyBy','notify','payBy','refundBy','balanceBy','setup'];
+  var explicitLatest = DL.filter(function(k){ return valid(F0[k]) && !res.guessed[k]; }).map(function(k){ return F0[k]; }).sort().pop();
+  var setY = function(d, y){ return mkDate(y, +d.slice(5, 7) - 1, +d.slice(8, 10)) || d; };
+  if(F0.start && startYearless && explicitLatest && F0.start < explicitLatest){
+    F0.start = setY(F0.start, +F0.start.slice(0, 4) + 1); if(F0.end) F0.end = setY(F0.end, +F0.end.slice(0, 4) + 1); res.guessed.start = 1;
   }
+  if(F0.start) DL.forEach(function(k){
+    if(!valid(F0[k]) || !res.guessed[k]) return;
+    var y = +F0.start.slice(0, 4), d = setY(F0[k], y); if(d > F0.start) d = setY(F0[k], y - 1); F0[k] = d;
+  });
   if(F0.applyBy && F0.notify && F0.applyBy > F0.notify) res.warn.push('The deadline reads as after the notification date.');
   if(F0.start && [F0.applyBy, F0.notify].some(function(d){ return valid(d) && d > F0.start; })) res.warn.push('A deadline reads as after the show starts.');
   var skip = {};
@@ -616,15 +661,31 @@ function readPaste(text, today){
   var keep = feeFind(text, '(?:less|minus)(?:[ \\t]+an?)?|(?:cancell?ation|processing|administrative|admin|handling)[ \\t]+fee', skip);
   if(jury) res.fields.jury = jury.v;
   if(booth) res.fields.booth = booth.v;
-  var within = /within[ \t]+(\d{1,2})[ \t]+(?:business[ \t]+)?days[ \t]+(?:of|after)[ \t]+(?:your[ \t]+)?(?:acceptance|notification|being[ \t]+accepted|invitation)/i.exec(text);
-  if(within && res.fields.notify){ var wd = addDays(res.fields.notify, +within[1]); if(!res.fields.payBy || wd < res.fields.payBy){ res.fields.payBy = wd; res.guessed.payBy = 1; } }
-  if(keep && res.fields.refundBy) res.fields.keep = keep.v;
+  var accepted = /congratulations|you(?:'ve| have) been (?:accepted|selected|invited)|pleased to (?:inform|invite|offer)|we are happy to (?:inform|invite)/i.test(text);
+  if(accepted){ res.fields.status = 'in'; res.guessed.status = 1; }
+  text.split(/(?<=[.!?])\s+|\n/).forEach(function(sent){
+    var w = /within[ \t]+(\d{1,2})[ \t]+(?:business[ \t]+|calendar[ \t]+)?days\b/i.exec(sent);
+    if(!w || /cancel|refund|withdraw/i.test(sent) || !/deposit|pay|fee|confirm|accept|sign|contract|commit/i.test(sent)) return;
+    var rel = /of|after|from/i.test(sent.slice(w.index + w[0].length, w.index + w[0].length + 12)) && /acceptance|notification|accepted|invitation|notified/i.test(sent);
+    var base = rel && res.fields.notify ? res.fields.notify : (accepted ? today : '');
+    if(!base) return;
+    var wd = addDays(base, +w[1]);
+    if(!res.fields.payBy || wd < res.fields.payBy){ res.fields.payBy = wd; res.guessed.payBy = 1; }
+  });
+  var pct = /(\d{1,3})[ \t]*%[^.\n]{0,30}refund|refund[^.\n]{0,30}?(\d{1,3})[ \t]*%/i.exec(text);
+  if(pct && res.fields.refundBy){
+    var pc = +(pct[1] || pct[2]);
+    if(pc > 0 && pc < 100){ if(res.fields.booth) res.fields.keep = Math.round(res.fields.booth * (100 - pc)) / 100; else res.warn.push('The refund is ' + pc + '%: enter what they keep.'); keep = null; }
+  }
+  if(keep && res.fields.refundBy && res.fields.keep == null) res.fields.keep = keep.v;
+  if(!res.fields.start && dates.length) res.warn.push('No show dates found: this show is not checked for clashes until you add them.');
+  var dep = feeFind(text, 'deposit', skip); if(dep && res.fields.booth && dep.v < res.fields.booth && res.fields.balanceBy) res.fields.deposit = dep.v;
   res.found = Object.keys(res.fields).length;
   return res;
 }
 
 return {STATUSES:STATUSES, valid:valid, addDays:addDays, diff:diff, dow:dow, endOf:endOf, active:active, num:num, rankOf:rankOf,
-        overlap:overlap, gapDays:gapDays, onsite:onsite, dropCost:dropCost, clusters:clusters, issues:issues, money:money, todo:todo, ics:ics, csv:csv,
+        overlap:overlap, gapDays:gapDays, onsite:onsite, dropCost:dropCost, paidSoFar:paidSoFar, hasBalance:hasBalance, stale:stale, live:live, clusters:clusters, issues:issues, money:money, todo:todo, ics:ics, csv:csv,
         readPaste:readPaste, findDates:findDates};
 })();
 if(typeof module !== 'undefined') module.exports = FS;
@@ -640,7 +701,7 @@ var VERIFY_URL = 'https://app-bizz-api.whop.site/api/verify';
 var CHECKOUT_HOME = 'https://whop.com/checkout/ch_8wBpUvjU2r3tCfS/';
 var CHECKOUT_PLAN = 'https://whop.com/checkout/plan_CkGFhUiDdMhXE';
 var PRICE = '$15';
-var GIFT = [];
+var GIFT = ['1b2ef49056ad7d82dc8cdafcac3d38684b7301976dc65a4836bb39ddd54ea124','16f6e302f6e63c7e774021b25a200ab088f4cbf84056b1151849ef79de81801e','92378276513c90af2abaf123c47eda99fda275cd53b0915f60133674f70bcf99','8bff8f8dfb7d0951b54965ce2714aa08969727c39459b8ddfbccb1589f4f15f0','bb6231786025c0577129994e6186f8134603fcce35740451db231abc8fed90a9','430ac7a234642cc9ae85d4321cd5cb264ae4d79acd0f660a5f1a72896702370e','bdb7f0ff8f346bf10bda61eceeacf2445f06a180c6cf9064495f76813657f79d','9d59e911651146e4aaaf96acb60e854a389efc52299c06ec6e450bd8b3bc0590','ce1e30568c92b7613a04a36f0e78fc643b94c5809e6d299b5ad8aa11efa77eaf','c5c16c14339dcf0326c5388e77ac51a405b1a39d3e6172354f99c5f6779d6182','f0772c54a7d8e85a4149fe47fc5a02e49c8d746d145a57a313439eb97addc079','4ae6335c899c38c095a31c112510730af79d8b4b781bf72501ff23cfac1d6546','b34c5b0eda7ad90228d1d0022e72d059f378fa86452dd0180cd3be1d3bf4f711','bfd1e8ffa81f732c825491e2da31c7ad21a54fdd6270573757f373366e0f1985','71f086cd06646b89ac4c18993d4ac9db5bd704d102cbba79312c0d61a0676080','67e8e84ebfa34f54f682ef56e9c5eaf08ec9476561b2977820c2ef2e1daaa9a0','a7f73ad9bb497184af8afc33927ac4344c0d70f315feff6343a6b489caf00f50','ab6e4a6466abe086edb92f69aff64596fdcd6cecf89eb11b295ebff6c9035e25','9331242d75c74fa6635f899d1eff2b4f36c6050b4617616d044a1b276cc67916','23e6535c079120cbcbf637cc9f29c383cf5abe6f7d9fd6e1adf196a811295af6','8840d4e331de76c8f46ff6a6c2f61e048bfa0ced9060558d622f1deb909ebcbb','bbfb77ba5a4dc688d347d46771a166264d481d97fd8f8eb1415e717a722d23c1','11c3edd0184e33dd0454cbe8e2d6e74e7c3af668538b5a5e7398baf5380cc0bb','1aa60f03366ada47dd47570ac823619c28259485bb8f1037cecc977a92b9f897','d7d85e351333733952cc9da3db17add6a90257b5af314dae69504fa040a8162d','b4d5b2e4ef6f0aa369ffb02ab2094218a24e96f6e3f26b4b1505cbc8c91ebd8f','a5d1b03e23c9f7da24f1716257792718895051f981c221f052063971c6241689','3ceee634a0a42ed58214eb55acfadebfbd715c4fcb756cca8faaca9c44e9ba18','2c8e0a0352aec8150cb7bce2595594a207d56826e547ce402dee004c47ff6841','2e313cc302d27dbc52971d93aab58b9376f4c7576cccebf00f7807f4d737dfbe','f0c3d6a841a358ca1ac1762b899696c9ac986e6657d1a5af9de0fdab80909315','580fc1f412c7cbbc90eed93f95e0c520ec57863a1d5d4371554cd19ce0bac2e7','6ec18b754203c315d1514e3243c5fe576409b7e36630ec79563034b59d08ceb9','4c5ba9c7bfe95cef32332eb42be560588e2aecc963fe79bcfb8fa6785971fb7d','57f025f9b4cafdf886e003b7c60dc0c62cf03a7435f75f271632faa65a50d824','217101429922889679245df11804eb5e73e15c6c5e636dacf56a023049d3f324','e48d9d9cabd04bd58b26cc5727c90df563a976a6be314c6296a82a6c70284335','5d8ec35f314e1913ae7bdfbb6c2d6d0959ceeb6ae82065786e933fd5790d36b2','07ce5468b150f14d5148fb8f2621b8d4548d7bfbabafaaa3e25d171bca9ffddd','8c7858d8878241c0802b86f88f6125f03e4666fed648342b88046e386e07c18e','60aceeece8d4c5dab0ed9b8d3f9c5fa94fb000d46a3aaaf2f126481237048a71','b99cde4d3f6a59d2f01200a5d451a1db739f54d3178681f572b24b96c46dd93a','b9fcbe2405b2a599446fbc7711d981d755f479637dd87aeaf5b2ce9a5e1cbafe','908f53e51c1d4bea4b7af3cc87213d10cfe77afc97cc74bec0b366ec556cbd60','3ab9ad62892ed33522b7e5bd2aea025e5c0f2ece86ff39977408cf59f8b941ea','b7cf3f7ae76998acebe38ac88fe2c7180e752c05b1c1cec1ced5286b81961019','b61df190afb1af4512b51461f075da4f9fa962813f8ecd3d7b4327f00f1b4c0b','579e4cd1183f61347373a79026f9566fc09333fa028b1cb8bf0585afcd1f7c59','4013fccfe59cc86ec4bd7b9d95613525e59f8a77268dfd30ff5636225df42390','70168579d303b0c8f340f2536b20932d9624df0c90d9abaebd83b6401718aa93','a47f11131ef90179d8f00d1de2c5e5d1ef46132e976893561f0cf5a39d296d14','cecb88b7162aba76a6c6c6cc4239abba37bb1c1b12063bd1b56bd7a83173e308','0db17d75a57d8e9a81a185cdd81ba4252bfb8f8998205d9af118ca2dafa5d6c4','ae72ec6214b40b776e85587bca0a91684d7109013eddc5e8ffe4c2d678dbd592','cbef059eccb1397b3bd5b46e4f3a34ad2f0839bffa39e79c0207475ba93e30e0','8a503b29ddcb9993f01884acfbd6b443c357ae48fff5eb7914e7b19a6ead339d','2e000a06b810c7c3a7f3ef4202aaa4d6efb7f932446897b08a6e7661e3c7f5cc','cf6462557661e2ce157ff708f34d4f5607b7abf5e2bec24b4c3704fab1eddad4','a3f3364371a509f49b73a444669a35b2af9a6bf7b0f1d9b5239869b6ef50465a','7c3584a91f0bf497e6ca066329ac4fccf4da67872632839caf1c983aae4b364c','21b78ec31ce85dbfe481d16b03fb6bc52ebb242252c07e063f859e00ed929cbb','5c4e29955b594c391b91e8734ac21f488d632e2026672174b501d4a44250f441','27a3d577ce1ac07de6abd5624a573df5d3ebaa3a76a5518b4cab356fb864d7d6','f27f93d8078d0150cff92c0b473f6b1135fbbc005142d2135525ef1b39a5f8fe','9de79299dd60d71b43765d2570b0de52735d5dbf5992caa89a7b6c0f8ad62c5b','3c15071fe989036cf895af250e751d6fcca6d8921f3bd7e3021834461a373813','2a113c0281e5ea8a95565f40b7c3d148d755084847942709c8c51a77823fe13d','0ce562f9d45e18dcc87949e0bc95ed96bd603a33459697690d2faa0466ba02c0','4bffb286bae507803ff6ee3aed9272f6290c80a8e17fc1eb35e4be0a3fe0f5c2','9fa4b9559febb1c8be64520bfcf2a74daff369fa309a397dc01385c3da00f575'];
 var KEY = 'fss.v1', PROKEY = 'fss.pro', FREE_SHOWS = 6;
 var STATUS_LABEL = {idea:'Thinking about it', applied:'Applied', waitlist:'Waitlisted', 'in':'Got in, not paid', booked:'Booked (paid)', passed:'Got in, said no', no:'Not accepted', withdrew:'Withdrew after paying'};
 
@@ -653,7 +714,7 @@ var SRC = (function(){ try{
 }catch(e){ return ''; } })();
 var FUNNEL_EV = {'tool-start':1, 'show-added':1, 'paste-read':1, 'paste-found':1, 'season-used':1, 'call-seen':1, 'status-set':1,
                  'ics-export':1, 'csv-export':1, 'print':1, 'pro-view':1, 'pro-limit':1, 'buy-click':1, 'pro-unlocked':1, 'pro-gift':1};
-var ALL_EVENTS = ['tool-start','show-added','paste-read','paste-found','season-used','call-seen','status-set','ics-export','csv-export','print','pro-view','pro-limit','buy-click','pro-unlocked','pro-gift','pro-notfound','backup','restore','example-cleared'];
+var ALL_EVENTS = ['tool-start','show-added','paste-read','paste-found','season-used','call-seen','status-set','ics-export','csv-export','print','pro-view','pro-limit','buy-click','pro-unlocked','pro-gift','pro-notfound','backup','restore','example-cleared','call-ack','keep-picked'];
 var ONCE = {}, QUEUE = [], SENDING = false, GC_READY = 0, WAITS = 0;
 /* one hit every 700 ms, first one 1.5 s after count.js loads: GoatCounter drops hits above ~4/s per visitor (bizz-handbell 11-24) */
 var SELFTEST = SRC.indexOf('selftest') === 0;
@@ -708,7 +769,7 @@ function example(){
     {id:'e5', ex:true, name:'Cedar Hollow Holiday Market', place:'Cedar Hollow', start:sat(-25), end:FS.addDays(sat(-25), 1), status:'no', rank:2, applyBy:d(-120), notify:d(-80), payBy:'', refundBy:'', jury:35, booth:300, notes:''}
   ]};
 }
-var DATE_KEYS = ['start','end','setup','applyBy','notify','payBy','refundBy','left'];
+var DATE_KEYS = ['start','end','setup','applyBy','notify','payBy','refundBy','balanceBy','left'];
 function clean(st){
   if(!st || st.v !== 1 || !Array.isArray(st.shows)) return null;
   var ids = {}, total = st.shows.length;
@@ -721,9 +782,11 @@ function clean(st){
     DATE_KEYS.forEach(function(k){ if(!FS.valid(s[k])) s[k] = ''; });
     if(s.end && s.start && s.end < s.start) s.end = '';
     if(FS.STATUSES.indexOf(s.status) < 0) s.status = 'idea';
-    s.rank = FS.rankOf(s); s.jury = FS.num(s.jury); s.booth = FS.num(s.booth); s.keep = FS.num(s.keep); s.ex = !!s.ex;
+    s.rank = FS.rankOf(s); s.jury = FS.num(s.jury); s.booth = FS.num(s.booth); s.keep = FS.num(s.keep); s.deposit = FS.num(s.deposit); s.ex = !!s.ex;
   });
   st.minGap = Math.max(0, Math.min(60, Math.floor(+st.minGap || 0)));
+  if(!st.ack || typeof st.ack !== 'object' || Array.isArray(st.ack)) st.ack = {};
+  var ak = Object.keys(st.ack); if(ak.length > 300) ak.slice(0, ak.length - 300).forEach(function(k){ delete st.ack[k]; });
   st.example = !!st.example && st.shows.some(function(s){ return s.ex; });
   st.dropped = total - st.shows.length;
   return st;
@@ -734,7 +797,7 @@ function isPro(){ return !!(PRO && (PRO.email || PRO.gift)); }
 var SAVE_OK = true;
 function save(){ var ok = lsSet(KEY, S); if(ok !== SAVE_OK){ SAVE_OK = ok; $('noSave').classList.toggle('hide', ok); } }
 function mine(){ return S.shows.filter(function(s){ return !s.ex; }); }
-function activeMine(){ return mine().filter(FS.active).length; }
+function activeMine(){ return mine().filter(function(s){ return FS.live(s, TODAY); }).length; }
 function find(id){ for(var i = 0; i < S.shows.length; i++) if(S.shows[i].id === id) return S.shows[i]; return null; }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function nm(s){ return esc((s.name || '').trim() || 'Untitled show'); }
@@ -750,73 +813,92 @@ function renderAll(){
   renderCalls(); renderSeason(); renderTodo(); renderMoney(); renderPro();
 }
 function costTxt(v){ return v ? usd(v) : '$0'; }
+function when(d){ var n = FS.diff(TODAY, d); return fmt(d) + (n < 0 ? ' (' + rel(n) + ')' : ''); }
+function callKey(x){ return [x.type, x.a.id, x.b.id, x.a.status, x.b.status, x.pay || '', x.notify || '', x.by || '', x.money || 0, x.gap == null ? '' : x.gap].join('|'); }
 function callHTML(x){
   var a = x.a, b = x.b, h = '', btn = '';
   function upd(s){ return '<button type="button" class="btn small ghost" data-edit="' + s.id + '">Update ' + nm(s) + '</button>'; }
+  function keepQ(){ return x.tie ? '<p><b>Which would you keep if both say yes?</b></p><div class="callbtns"><button type="button" class="btn small" data-keep="' + b.id + '" data-over="' + a.id + '">' + nm(b) + '</button><button type="button" class="btn small" data-keep="' + a.id + '" data-over="' + b.id + '">' + nm(a) + '</button></div>' : ''; }
   if(x.type === 'decide'){
-    var title = x.forecast ? 'If ' + nm(a) + ' takes you, you commit before ' + nm(b) + ' answers' : 'Commit to ' + nm(a) + ' before ' + nm(b) + ' answers';
+    var title = x.yIdea ? 'If you apply to ' + nm(b) + ', ' + nm(a) + ' wants your money before it answers'
+              : x.forecast ? 'If ' + nm(a) + ' takes you, you commit before ' + nm(b) + ' answers'
+              : 'Commit to ' + nm(a) + ' before ' + nm(b) + ' answers';
     h += '<div class="kind">' + (x.hard ? 'Blind decision' : 'Heads-up') + '</div><h3>' + title + '</h3>';
-    h += '<div class="fork"><div class="tk pay"><b>' + nm(a) + '</b><span>Commit' + (x.money ? ' (' + usd(x.money) + ')' : '') + ' by ' + fmt(x.pay) + '</span></div>' +
+    h += '<div class="fork"><div class="tk pay"><b>' + nm(a) + '</b><span>Commit' + (x.money ? ' (' + usd(x.money) + ')' : '') + ' by ' + when(x.pay) + '</span></div>' +
          '<div class="gap"><em>' + x.blind + '</em><small>day' + (x.blind === 1 ? '' : 's') + ' blind</small></div>' +
          '<div class="tk wait"><b>' + nm(b) + '</b><span>Notifies ' + fmt(x.notify) + '</span></div></div>';
-    if(x.hard){
-      var later = FS.dropCost({status:'booked', booth:a.booth, keep:a.keep, refundBy:a.refundBy}, x.notify);
-      h += '<p>You want ' + nm(b) + ' more, and both are on ' + rangeTxt(a) + '. ' + 'If you commit to ' + nm(a) + (x.forecast ? ' (once it accepts you)' : '') + ' and then get into ' + nm(b) + ', switching costs you ' + (later ? usd(later) : 'nothing more') + (a.refundBy ? (later < FS.num(a.booth) ? ' (their refund window is still open then)' : ' (their refund window closes ' + fmt(a.refundBy) + ')') : ' (no refund date entered)') + '.</p>';
-      h += '<p>' + (x.forecast ? 'Cheapest moment to decide is now: apply to ' + nm(a) + ' only if you\'d keep it, or if it refunds. ' : '') + 'Ways out: ask ' + nm(b) + ' whether they can tell you sooner, or ask ' + nm(a) + ' for a few more days.</p>';
-    } else {
-      h += '<p>You want ' + nm(a) + ' at least as much as ' + nm(b) + '. If you commit to it, withdraw from ' + nm(b) + '; its jury fee is spent either way.</p>';
-    }
-    btn = upd(b) + upd(a);
+    var later = FS.dropCost({status:'booked', booth:a.booth, keep:a.keep, refundBy:a.refundBy}, x.notify);
+    var cost = 'switching to ' + nm(b) + ' then costs you ' + (later ? usd(later) : 'nothing more') + (a.refundBy ? (later < FS.num(a.booth) ? ' (their refund window is still open then)' : ' (their refund window closes ' + fmt(a.refundBy) + ')') : ' (no refund date entered)') + '.';
+    if(x.blind === 0) h += '<p>' + nm(b) + ' answers the same day ' + nm(a) + '\'s money is due. The email may come that evening.</p>';
+    if(x.yIdea) h += '<p>Both are on ' + rangeTxt(a) + '. If you apply to ' + nm(b) + ' and commit to ' + nm(a) + ', ' + cost + ' Apply to ' + nm(b) + ' only if you\'d drop ' + nm(a) + ' for it, or skip it this year.</p>';
+    else if(x.forecast) h += '<p>Both are on ' + rangeTxt(a) + '. If ' + nm(a) + ' accepts you and you commit, ' + cost + (a.status === 'idea' ? ' Apply to ' + nm(a) + ' only if you\'d keep it even if ' + nm(b) + ' says yes later.' : '') + '</p>';
+    else h += '<p>Both are on ' + rangeTxt(a) + '. If you commit to ' + nm(a) + ' and then get into ' + nm(b) + ', ' + cost + '</p>';
+    if(!x.tie && x.hard) h += '<p>You said you want ' + nm(b) + ' more. Ways out: ask ' + nm(b) + ' whether they can tell you sooner, or ask ' + nm(a) + ' for a few more days.</p>';
+    if(!x.hard) h += '<p>You said you want ' + nm(a) + ' more, so committing to it is fine; ' + nm(b) + '\'s jury fee is spent either way.</p>';
+    h += keepQ(); btn = upd(b) + upd(a);
   } else if(x.type === 'pick'){
-    var other = function(keep, drop){ return 'Keep ' + nm(keep) + ': dropping ' + nm(drop) + ' costs ' + costTxt(FS.dropCost(drop, TODAY)) + (drop.status === 'booked' && drop.refundBy && drop.refundBy >= TODAY ? ' until ' + fmt(drop.refundBy) + ', ' + costTxt(FS.dropCost(drop, FS.addDays(drop.refundBy, 1))) + ' after' : '') + '.'; };
+    var other = function(keep, drop){ var now = FS.dropCost(drop, TODAY); return 'Keep ' + nm(keep) + ': dropping ' + nm(drop) + ' costs ' + (now ? usd(now) : '$0 more (its jury fee is already spent)') + (drop.status === 'booked' && drop.refundBy && drop.refundBy >= TODAY ? ' until ' + fmt(drop.refundBy) + ', ' + costTxt(FS.dropCost(drop, FS.addDays(drop.refundBy, 1))) + ' after' : '') + '.'; };
     h += '<div class="kind">You got into both</div><h3>' + nm(a) + ' and ' + nm(b) + ' are on the same days</h3>';
-    h += '<p>' + (x.by ? 'Choose by ' + fmt(x.by) + ', when the first one wants your money. ' : '') + 'You can only work one.</p><p>' + other(a, b) + '<br>' + other(b, a) + '</p>';
+    h += '<p>' + (x.by ? 'Choose by ' + when(x.by) + ', when the first one wants your money. ' : '') + 'You can only work one.</p><p>' + other(a, b) + '<br>' + other(b, a) + '</p>';
     btn = upd(a) + upd(b);
   } else if(x.type === 'late'){
     h += '<div class="kind">Answer is late</div><h3>' + nm(b) + ' was due to notify ' + fmt(b.notify) + '</h3>';
-    h += '<p>' + (x.why === 'booked' ? 'You\'ve paid ' + nm(a) + ' for the same days; switching now would cost ' + costTxt(x.money) + '.' : 'You have to commit to ' + nm(a) + ' (same days) by ' + fmt(x.pay) + '.') + ' Check your spam folder and the application site, then email ' + nm(b) + '. If they\'ve answered, update it here.</p>';
-    btn = upd(b) + upd(a);
+    h += '<p>' + (x.why === 'booked' ? 'You\'ve paid ' + nm(a) + ' for the same days; switching now would cost ' + costTxt(x.money) + '.' : 'You\'re in at ' + nm(a) + ' (same days) and have to commit by ' + when(x.pay) + '.') + ' Check your spam folder and the application site (ZAPP: My ZAPPlications; Juried Art Services: My Applications), then email ' + nm(b) + '. If they\'ve answered, update it here.</p>';
+    h += keepQ(); btn = upd(b) + upd(a);
   } else if(x.type === 'risk'){
-    h += '<div class="kind">' + (x.hard ? 'Money on the line' : 'Heads-up') + '</div><h3>You\'ve paid ' + nm(a) + '; ' + nm(b) + ' notifies ' + fmt(b.notify) + '</h3>';
-    h += '<div class="fork"><div class="tk paid"><b>' + nm(a) + '</b><span>Paid' + (FS.num(a.booth) ? ' ' + usd(a.booth) : '') + (x.refund ? ', refund until ' + fmt(x.refund) : ', no refund date') + '</span></div><div class="gap"><em>' + rangeTxt(a) + '</em><small>same days</small></div><div class="tk wait"><b>' + nm(b) + '</b><span>Notifies ' + fmt(b.notify) + '</span></div></div>';
-    h += '<p>' + (x.hard ? 'You want ' + nm(b) + ' more. ' : '') + 'If ' + nm(b) + ' says yes, switching costs you ' + costTxt(x.money) + '.</p>';
-    btn = upd(b) + upd(a);
+    h += '<div class="kind">' + (x.hard ? 'Money on the line' : 'Heads-up') + '</div><h3>' + (x.yIdea ? 'You\'ve paid ' + nm(a) + '; ' + nm(b) + ' is on the same days' : 'You\'ve paid ' + nm(a) + '; ' + nm(b) + ' notifies ' + fmt(b.notify)) + '</h3>';
+    h += '<div class="fork"><div class="tk paid"><b>' + nm(a) + '</b><span>Paid' + (FS.paidSoFar(a, TODAY) ? ' ' + usd(FS.paidSoFar(a, TODAY)) : '') + (x.refund ? ', refund until ' + fmt(x.refund) : ', no refund date') + '</span></div><div class="gap"><em>' + rangeTxt(a) + '</em><small>same days</small></div><div class="tk wait"><b>' + nm(b) + '</b><span>Notifies ' + fmt(b.notify) + '</span></div></div>';
+    h += '<p>' + (x.yIdea ? 'Applying to ' + nm(b) + ' only makes sense if you\'d drop ' + nm(a) + ' for it: ' : '') + 'If ' + nm(b) + ' says yes, switching costs you ' + costTxt(x.money) + '.</p>';
+    h += keepQ(); btn = upd(b) + upd(a);
   } else if(x.type === 'waitlist'){
     h += '<div class="kind">' + (x.hard ? 'Waitlist' : 'Waitlist heads-up') + '</div><h3>If ' + nm(b) + ' calls you off the waitlist</h3>';
     h += '<p>' + nm(b) + ' can call any day up to the show, and usually wants an answer within a day or two. You\'re ' + (a.status === 'booked' ? 'booked' : 'in, not paid yet,') + ' at ' + nm(a) + ' on the same days. ';
-    if(a.status === 'booked') h += 'Switching costs ' + costTxt(x.now) + ' today' + (x.refund && x.refund >= TODAY ? ', ' + costTxt(x.later) + ' after ' + fmt(x.refund) : '') + '.';
+    if(a.status === 'booked') h += 'Switching costs ' + costTxt(x.now) + ' today' + (x.refund && x.refund >= TODAY && x.later !== x.now ? ', ' + costTxt(x.later) + ' after ' + fmt(x.refund) : '') + '.';
     else h += 'If they call before you commit to ' + nm(a) + (a.payBy ? ' (' + fmt(a.payBy) + ')' : '') + ', switching costs nothing but ' + nm(a) + '\'s jury fee.';
     h += ' Decide now which one you\'d pick, so the phone call is easy.</p>';
-    btn = upd(b) + upd(a);
+    h += keepQ(); btn = upd(b) + upd(a);
+  } else if(x.type === 'unknown' && x.why === 'nopay'){
+    h += '<div class="kind">Missing date</div><h3>When do you have to commit to ' + nm(a) + '?</h3>';
+    h += '<p>' + nm(b) + ' (same days) notifies ' + fmt(b.notify) + '. Add ' + nm(a) + '\'s commit or pay-by date to see whether you\'d be deciding blind.</p>';
+    btn = upd(a) + upd(b);
   } else if(x.type === 'unknown'){
     h += '<div class="kind">Missing date</div><h3>' + nm(b) + ' hasn\'t said when it notifies</h3>';
-    h += '<p>' + nm(b) + ' and ' + nm(a) + ' are on the same days. ' + (x.why === 'booked' ? 'You\'ve paid ' + nm(a) + '.' : 'You have to commit to ' + nm(a) + ' by ' + fmt(a.payBy) + '.') + ' Ask ' + nm(b) + ' when they notify, and add it here to see if you\'ll be deciding blind.</p>';
-    btn = upd(b) + upd(a);
+    h += '<p>' + nm(b) + ' and ' + nm(a) + ' are on the same days. ' + (x.why === 'booked' ? 'You\'ve paid ' + nm(a) + '.' : 'You have to commit to ' + nm(a) + ' by ' + when(a.payBy) + '.') + ' Ask ' + nm(b) + ' when they notify, and add it here to see if you\'ll be deciding blind.</p>';
+    h += keepQ(); btn = upd(b) + upd(a);
   } else if(x.type === 'double'){
-    h += '<div class="kind">Double-booked</div><h3>You\'ve paid for two shows on the same days</h3><p>' + nm(a) + ' (' + rangeTxt(a) + ') and ' + nm(b) + ' (' + rangeTxt(b) + ')' + (x.money ? ', ' + usd(x.money) + ' in booth fees' : '') + '. Dropping ' + nm(a) + ' today costs ' + costTxt(FS.dropCost(a, TODAY)) + '; dropping ' + nm(b) + ' costs ' + costTxt(FS.dropCost(b, TODAY)) + '.</p>';
+    h += '<div class="kind">Double-booked</div><h3>You\'ve paid for two shows on the same days</h3><p>' + nm(a) + ' (' + rangeTxt(a) + ') and ' + nm(b) + ' (' + rangeTxt(b) + '). Dropping ' + nm(a) + ' today costs ' + costTxt(FS.dropCost(a, TODAY)) + '; dropping ' + nm(b) + ' costs ' + costTxt(FS.dropCost(b, TODAY)) + '.</p>';
     btn = upd(a) + upd(b);
   } else if(x.type === 'close'){
     h += '<div class="kind">Tight turnaround</div><h3>Only ' + days(Math.max(0, x.gap)) + ' between ' + nm(a) + ' and ' + nm(b) + '</h3><p>You said you need ' + days(x.need) + '. ' + nm(a) + ' ends ' + fmt(FS.endOf(a)) + '; you\'re due at ' + nm(b) + ' ' + fmt(FS.onsite(b)) + '.</p>';
     btn = upd(a) + upd(b);
   } else if(x.type === 'same'){
-    h += '<div class="kind">Same days</div><h3>' + nm(a) + ' and ' + nm(b) + ' overlap</h3><p>You can only work one. Before you pay both jury fees, decide which you\'d keep if both say yes, and add their notify and commit dates so this can warn you about deciding blind.</p>';
-    btn = upd(a) + upd(b);
+    var miss = [];
+    [a, b].forEach(function(s){ if((s.status === 'applied' || s.status === 'idea') && !s.notify) miss.push(nm(s) + '\'s notify date'); if(s.status !== 'booked' && !s.payBy) miss.push(nm(s) + '\'s commit date'); });
+    h += '<div class="kind">Same days</div><h3>' + nm(a) + ' and ' + nm(b) + ' overlap</h3><p>You can only work one.' + (a.status === 'idea' || b.status === 'idea' ? ' Before you pay a second jury fee, decide which you\'d keep if both say yes.' : ' Decide now which you\'d keep if both say yes.') + (miss.length ? ' Add ' + miss.slice(0, 2).join(' and ') + ' so this can warn you about deciding blind.' : '') + '</p>';
+    h += keepQ(); btn = upd(a) + upd(b);
   }
-  return '<div class="call ' + (x.hard ? 'hard' : x.type === 'close' || x.type === 'same' || (x.type === 'decide' && !x.hard) ? 'soft' : '') + '">' + h + '<div class="callbtns">' + btn + '</div></div>';
+  var key = callKey(x), acked = S.ack && S.ack[key];
+  btn += acked ? '' : '<button type="button" class="btn small ghost" data-ack="' + esc(key) + '">Got it</button>';
+  return '<div class="call ' + (x.hard ? 'hard' : 'soft') + '">' + h + '<div class="callbtns">' + btn + '</div></div>';
 }
 function renderCalls(){
-  var list = FS.issues(S.shows, {minGap:S.minGap, today:TODAY});
-  var serious = list.filter(function(x){ return x.hard; }).length;
-  $('callCount').textContent = list.length; $('callCount').classList.toggle('zero', !list.length);
-  if(!list.length){
-    $('calls').innerHTML = '<div class="none">' + (S.shows.length < 2 ? 'Add the shows you\'re applying to. When two land on the same dates, or a booth fee is due before another show answers, it shows up here.' : 'No clashes right now. Keep the answer dates and pay-by dates filled in so this stays true.') + '</div>';
-  } else $('calls').innerHTML = list.map(callHTML).join('');
-  if(list.length && !S.example && serious) trackOnce('call-seen');
+  var list = FS.issues(S.shows, {minGap:S.minGap, today:TODAY}).filter(function(x){ return x.type !== 'close' || x.firm; });
+  var ack = S.ack || {};
+  var main = list.filter(function(x){ return x.hard && !ack[callKey(x)]; }), rest = list.filter(function(x){ return !(x.hard && !ack[callKey(x)]); });
+  $('callCount').textContent = main.length; $('callCount').classList.toggle('zero', !main.length);
+  var h = '';
+  if(!main.length) h += '<div class="none">' + (S.shows.length < 2 ? 'Add the shows you\'re applying to. When two land on the same days, or a booth fee is due before another show answers, it shows up here.' : rest.length ? 'Nothing urgent. Smaller notes are below.' : 'No clashes right now. Keep the notify and commit dates filled in so this stays true.') + '</div>';
+  h += main.map(callHTML).join('');
+  if(rest.length) h += '<details class="more"' + (main.length ? '' : ' open') + '><summary>' + rest.length + ' smaller note' + (rest.length === 1 ? '' : 's') + ' and ones you\'ve marked "Got it"</summary>' + rest.map(callHTML).join('') + '</details>';
+  $('calls').innerHTML = h;
+  if(main.length && !S.example) trackOnce('call-seen');
 }
 function showHTML(s){
   var past = FS.valid(s.start) && FS.endOf(s) < TODAY;
   var dl = [];
-  if(s.status === 'idea' && s.applyBy) dl.push('Apply by ' + short(s.applyBy));
+  if(FS.stale(s, TODAY)) dl.push('Deadline passed: did you apply? Update it');
+  else if(s.status === 'idea' && s.applyBy) dl.push('Apply by ' + short(s.applyBy));
+  if(FS.hasBalance(s) && s.balanceBy >= TODAY) dl.push('Balance ' + usd(FS.num(s.booth) - FS.num(s.deposit)) + ' by ' + short(s.balanceBy));
   if((s.status === 'applied' || s.status === 'idea') && s.notify) dl.push('Notifies ' + short(s.notify));
   if((s.status === 'in' || s.status === 'applied' || s.status === 'idea') && s.payBy) dl.push('Commit by ' + short(s.payBy));
   if(s.setup && (s.status === 'booked' || s.status === 'in')) dl.push('Set-up ' + short(s.setup));
@@ -840,7 +922,7 @@ function renderSeason(){
   cl.forEach(function(group){
     var m = group[0].start.slice(0, 7);
     if(m !== lastM){ h += '<div class="month">' + MN[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4) + '</div>'; lastM = m; }
-    var act = group.filter(FS.active), clash = act.length > 1, tight = '';
+    var act = group.filter(function(s){ return FS.live(s, TODAY); }), clash = act.length > 1, tight = '';
     if(!clash) group.forEach(function(s){ if(tightOf[s.id]) tight = tightOf[s.id]; });
     h += '<div class="cluster' + (clash ? ' clash' : tight ? ' tight' : '') + '">' + (clash ? '<span class="tag">Same days · ' + act.length + ' shows</span>' : tight ? '<span class="tag">' + tight + '</span>' : '') + group.map(showHTML).join('') + '</div>';
   });
@@ -856,12 +938,12 @@ function renderTodo(){
   }).join('') + (t.length > 12 ? '<li style="grid-template-columns:1fr">+ ' + (t.length - 12) + ' more</li>' : '');
 }
 function renderMoney(){
-  var m = FS.money(S.shows);
+  var m = FS.money(S.shows, TODAY);
   $('money').innerHTML =
     '<div><b>' + usd(m.jury) + '</b><span>jury fees, ' + m.applied + ' application' + (m.applied === 1 ? '' : 's') + '</span></div>' +
     '<div class="' + (m.wasted ? 'bad' : '') + '"><b>' + usd(m.wasted) + '</b><span>jury fees on shows you\'re not doing</span></div>' +
     '<div><b>' + usd(m.paid) + '</b><span>booth fees paid</span></div>' +
-    '<div class="' + (m.due ? 'bad' : '') + '"><b>' + usd(m.due) + '</b><span>booth fees still to pay</span></div>' +
+    '<div class="' + (m.due ? 'bad' : '') + '"><b>' + usd(m.due) + '</b><span>booth fees still to pay, if you keep them all</span></div>' +
     (m.lost ? '<div class="bad" style="grid-column:1/-1"><b>' + usd(m.lost) + '</b><span>booth fees lost by withdrawing</span></div>' : '') +
     '<div style="grid-column:1/-1"><b>' + (m.rate == null ? '–' : Math.round(m.rate * 100) + '%') + '</b><span>' + (m.decided ? 'got in: ' + m.accepted + ' of ' + m.decided + ' that answered' : 'acceptance rate, once shows answer') + (m.pending ? ' · ' + m.pending + ' still waiting' : '') + '</span></div>';
 }
@@ -880,16 +962,18 @@ function proGate(why){ track('pro-limit'); say(why + ' is part of Pro (' + PRICE
 
 /* ---------- editor ---------- */
 var editing = null;
-var F = {name:'fName', place:'fPlace', start:'fStart', end:'fEnd', setup:'fSetup', status:'fStatus', rank:'fRank', applyBy:'fApply', notify:'fNotify', payBy:'fPay', refundBy:'fRefund', keep:'fKeep', jury:'fJury', booth:'fBooth', notes:'fNotes'};
+var F = {name:'fName', place:'fPlace', start:'fStart', end:'fEnd', setup:'fSetup', status:'fStatus', rank:'fRank', applyBy:'fApply', notify:'fNotify', payBy:'fPay', refundBy:'fRefund', keep:'fKeep', jury:'fJury', booth:'fBooth', deposit:'fDeposit', balanceBy:'fBalance', notes:'fNotes'};
 $('fStatus').innerHTML = FS.STATUSES.map(function(k){ return '<option value="' + k + '">' + STATUS_LABEL[k] + '</option>'; }).join('');
 function openEd(id){
   if(!id && !isPro() && activeMine() >= FREE_SHOWS){ proGate('More than ' + FREE_SHOWS + ' active shows'); return; }
   editing = id ? find(id) : null;
-  var s = editing || {name:'', place:'', start:'', end:'', setup:'', status:'applied', rank:2, applyBy:'', notify:'', payBy:'', refundBy:'', keep:'', jury:'', booth:'', notes:''};
+  var s = editing || {name:'', place:'', start:'', end:'', setup:'', status:'applied', rank:2, applyBy:'', notify:'', payBy:'', refundBy:'', keep:'', jury:'', booth:'', deposit:'', balanceBy:'', notes:''};
   Object.keys(F).forEach(function(k){ var el = $(F[k]); el.value = s[k] == null || s[k] === 0 ? '' : s[k]; el.classList.remove('filled'); });
   $('fRank').value = String(FS.rankOf(s));
   $('pasteIn').value = ''; $('pasteMsg').textContent = ''; $('edErr').textContent = '';
   $('edTitle').textContent = editing ? 'Edit show' : 'Add a show';
+  $('edForm').insertBefore(editing ? $('edQuick') : $('edPaste'), editing ? $('edPaste') : $('edQuick'));   // editing: status first; new: paste first
+  $('pasteIn').placeholder = editing ? 'Paste an acceptance email or the show page to update the dates' : 'Paste the show\'s dates and fees here';
   $('btnDel').classList.toggle('hide', !editing);
   $('fName').maxLength = 90;
   var dlg = $('ed');
@@ -904,7 +988,9 @@ function readPaste(){
   var r = FS.readPaste(t, TODAY), keys = Object.keys(r.fields);
   Object.keys(F).forEach(function(k){ $(F[k]).classList.remove('filled'); });
   keys.forEach(function(k){ var el = $(F[k]); if(el){ el.value = r.fields[k]; el.classList.add('filled'); } });
-  if(!$('fName').value.trim()){ var first = t.split(/\n/).map(function(x){ return x.trim(); }).filter(function(x){ return x && x.length <= 80 && !/\d{4}|deadline|date|apply|back to|zapp|menu|home|log ?in|sign/i.test(x); })[0]; if(first){ $('fName').value = first; $('fName').classList.add('filled'); } }
+  if(r.fields.status === 'in' && editing && (editing.status === 'in' || editing.status === 'booked')) { $('fStatus').value = editing.status; $('fStatus').classList.remove('filled'); }
+  if(!$('fName').value.trim()){ var first = t.split(/\n/).map(function(x){ return x.trim(); }).filter(function(x){ return x && x.length <= 80 && !/\$|:|deadline|dates?\b|apply|application|back to|zapp|juried art services|caf[eé]|menu|home|log ?in|sign|congratulations|dear|notif|booth|jury|fee/i.test(x); })[0];
+    if(first) first = first.split(/\s+[—–|-]\s+|,\s*(?=(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d)/i)[0].replace(/\s*\(?\b20\d\d\b\)?\s*$/, '').trim() || first; if(first){ $('fName').value = first; $('fName').classList.add('filled'); } }
   var g = Object.keys(r.guessed).length;
   if(!keys.length) $('pasteMsg').innerHTML = '<span class="err">Couldn\'t find dates in that. Type them in below.</span>';
   else $('pasteMsg').innerHTML = esc('Filled ' + keys.length + ' field' + (keys.length === 1 ? '' : 's') + ' (yellow). Check each one against the page' + (g ? '; ' + g + ' had no year or label, so look twice' : '') + '.') + (r.warn.length ? ' <span class="err">' + esc(r.warn.join(' ')) + '</span>' : '');
@@ -921,9 +1007,10 @@ function saveEd(e){
   if(v.start && v.notify && v.notify > v.start) odd.push('the notify date is after the show');
   if(v.applyBy && v.notify && v.applyBy > v.notify) odd.push('the apply-by date is after the notify date');
   if(odd.length && !confirm('Check the dates: ' + odd.join('; ') + '. Save anyway?')) return;
-  var bad = ['start','end','setup','applyBy','notify','payBy','refundBy'].filter(function(k){ return v[k] && !FS.valid(v[k]); });
+  var bad = ['start','end','setup','applyBy','notify','payBy','refundBy','balanceBy'].filter(function(k){ return v[k] && !FS.valid(v[k]); });
   if(bad.length){ $('edErr').textContent = 'Check the year in that date (2000–2100).'; $(F[bad[0]]).focus(); return; }
   if(editing && !find(editing.id)){ S.shows.push(editing); }             // another tab replaced the list while this was open: keep the edit
+  if(editing && !isPro() && !FS.live(editing, TODAY) && FS.active({status:v.status}) && activeMine() >= FREE_SHOWS){ proGate('More than ' + FREE_SHOWS + ' active shows'); return; }
   if(editing) editing = find(editing.id);
   var wasEx = editing && editing.ex, isNew = !editing;
   if(isNew && clearExample()) say('Cleared the example season.');
@@ -931,7 +1018,7 @@ function saveEd(e){
   if(wasEx){ s.ex = false; }                                              // an example show you edit becomes yours
   var oldStatus = s.status;
   Object.keys(F).forEach(function(k){ s[k] = v[k]; });
-  s.rank = +v.rank || 2; s.jury = FS.num(v.jury); s.booth = FS.num(v.booth); s.keep = FS.num(v.keep);
+  s.rank = +v.rank || 2; s.jury = FS.num(v.jury); s.booth = FS.num(v.booth); s.keep = FS.num(v.keep); s.deposit = FS.num(v.deposit);
   if(s.status === 'withdrew' && oldStatus !== 'withdrew') s.left = TODAY;
   if(!FS.valid(s.setup) || !s.start || s.setup >= s.start) s.setup = '';
   if(!FS.valid(s.end) || s.end === s.start) s.end = '';
@@ -1008,6 +1095,12 @@ $('fileIn').addEventListener('change', function(){
 ['btnAdd','btnAdd2','btnAdd0'].forEach(function(id){ $(id).addEventListener('click', function(){ openEd(null); }); });
 $('btnStart').addEventListener('click', function(){ clearExample(); track('example-cleared'); renderAll(); openEd(null); });
 document.addEventListener('click', function(e){
+  var k = e.target.closest ? e.target.closest('[data-ack],[data-keep]') : null;
+  if(k){
+    if(k.hasAttribute('data-ack')){ S.ack = S.ack || {}; S.ack[k.getAttribute('data-ack')] = 1; track('call-ack'); }
+    else { var kp = find(k.getAttribute('data-keep')), ov = find(k.getAttribute('data-over')); if(kp && ov){ kp.rank = 1; ov.rank = 3; track('keep-picked'); } }
+    if(!S.example) started(); save(); renderAll(); return;
+  }
   var t = e.target.closest ? e.target.closest('[data-edit],[data-add]') : null; if(!t) return;
   if(t.hasAttribute('data-add')) openEd(null); else openEd(t.getAttribute('data-edit'));
 });
@@ -1024,7 +1117,7 @@ $('minGap').addEventListener('change', function(){ S.minGap = Math.max(0, Math.m
 $('btnBuy').addEventListener('click', function(){ track('buy-click'); });
 $('btnUnlock').addEventListener('click', unlock);
 $('proKey').addEventListener('keydown', function(e){ if(e.key === 'Enter') unlock(); });
-window.addEventListener('storage', function(e){ if(e.key === KEY){ var st = clean(lsGet(KEY, null)); if(st){ S = st; if(editing && !find(editing.id)) S.shows.push(editing); renderAll(); } } });
+window.addEventListener('storage', function(e){ if(e.key === KEY){ var st = clean(lsGet(KEY, null)); if(st){ S = st; renderAll(); } } });
 
 if(!lsSet('fss.probe', 1)){ SAVE_OK = false; $('noSave').classList.remove('hide'); }
 renderAll();
