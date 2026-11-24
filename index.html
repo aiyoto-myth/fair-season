@@ -498,7 +498,7 @@ function ics(shows, stamp){
 }
 
 /* ---------- spreadsheet (CSV) ---------- */
-var CSV_COLS = ['name','place','setup','start','end','status','rank','applyBy','notify','payBy','refundBy','keep','jury','booth','deposit','balanceBy','notes'];
+var CSV_COLS = ['name','place','setup','start','end','status','rank','applyBy','notify','payBy','refundBy','keep','jury','booth','deposit','balanceBy','left','notes'];
 function csvCell(v){ v = v == null ? '' : String(v); if(/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function csv(shows){
   return [CSV_COLS.join(',')].concat(shows.map(function(s){ return CSV_COLS.map(function(k){ return csvCell(s[k]); }).join(','); })).join('\r\n') + '\r\n';
