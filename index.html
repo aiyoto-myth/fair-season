@@ -1122,7 +1122,7 @@ window.addEventListener('storage', function(e){ if(e.key === KEY){ var st = clea
 if(!lsSet('fss.probe', 1)){ SAVE_OK = false; $('noSave').classList.remove('hide'); }
 renderAll();
 try{ var seenPro = false; new IntersectionObserver(function(es){ es.forEach(function(x){ if(x.isIntersecting && !seenPro && !isPro()){ seenPro = true; track('pro-view'); } }); }).observe($('proSec')); }catch(e){}
-if(GC_CODE){ var gs = document.createElement('script'); gs.async = true; gs.src = '//gc.zgo.at/count.js'; gs.setAttribute('data-goatcounter', 'https://' + GC_CODE + '.goatcounter.com/count'); document.head.appendChild(gs); }
+if(GC_CODE){ var gs = document.createElement('script'); gs.async = true; gs.src = '//gc.zgo.at/count.js'; gs.setAttribute('data-goatcounter', 'https://' + GC_CODE + '.goatcounter.com/count'); if(SELFTEST) gs.setAttribute('data-goatcounter-settings', '{"no_onload": true}'); document.head.appendChild(gs); }   // self-test: no pageview, so /fair-season visits stay real
 (function(){
   var q = new URLSearchParams(location.search);
   var via = (q.get('via') || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20), af = (q.get('a') || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
